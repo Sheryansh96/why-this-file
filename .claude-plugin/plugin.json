@@ -1,0 +1,12 @@
+{
+  "name": "change-rationale-map",
+  "version": "0.1.0",
+  "description": "Visualize a Claude Code session transcript as an interactive graph of which files were touched, why, and how the touches relate.",
+  "author": {
+    "name": "Shreyas",
+    "email": "ushreyansh96@gmail.com"
+  },
+  "skills": [
+    "./skills/change-rationale-map"
+  ]
+}
