@@ -1,0 +1,15 @@
+[
+  {"bubbleId": "b1", "type": 1, "text": "Add rate limiting to our API so a single client can't hammer the /search endpoint."},
+  {"bubbleId": "b2", "type": 2, "text": "Let me check config.py first to see the existing settings pattern.",
+   "toolFormerData": {"name": "read_file", "params": {"target_file": "app/config.py"}}},
+  {"bubbleId": "b3", "type": 2, "text": "Config is a plain class. I'll add RATE_LIMIT_DEFAULT and per-route overrides here.",
+   "toolFormerData": {"name": "edit_file", "params": {"target_file": "app/config.py"}}},
+  {"bubbleId": "b4", "type": 2, "text": "No middleware module exists yet, so I'll create middleware.py with a RateLimiter class that reads config.py's overrides.",
+   "toolFormerData": {"name": "edit_file", "params": {"target_file": "app/middleware.py"}}},
+  {"bubbleId": "b5", "type": 2, "text": "middleware.py needs to be wired in, so I'll edit routes.py to call RateLimiter.allow() before the /search handler.",
+   "toolFormerData": {"name": "edit_file", "params": {"target_file": "app/routes.py"}}},
+  {"bubbleId": "b6", "type": 2, "text": "routes.py references a shared rate_limiter that doesn't exist yet — instantiate it in app_init.py with the other singletons.",
+   "toolFormerData": {"name": "edit_file", "params": {"target_file": "app/app_init.py"}}},
+  {"bubbleId": "b7", "type": 2, "text": "Adding a test that hits /search past the limit and expects a 429.",
+   "toolFormerData": {"name": "edit_file", "params": {"target_file": "tests/test_rate_limit.py"}}}
+]
