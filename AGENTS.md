@@ -95,26 +95,41 @@ without a `cd`); they are not a second copy of the code.
    from a CDN — this matters if the HTML is published somewhere with a
    strict CSP (e.g. a Claude Artifact), where external script loads are
    blocked and a CDN `<script src>` silently fails.
-5. **CLI** (`cli.py`): the only thing an agent needs to invoke. `extract`
-   runs step 1+3, `render` runs step 4, `map` runs all of it.
+5. **CLI** (`cli.py`): the only thing an agent needs to invoke. `analyze`
+   (alias `map`) runs steps 1+3+4 in one shot and auto-detects which agent
+   produced the transcript from its own shape (`cli.sniff_agent`); `extract`
+   runs 1+3 alone (useful for inspecting the intermediate graph.json);
+   `render` runs step 4 alone.
 
 ## How to run the project
 
-From the repo root:
+From the repo root, agent auto-detected — no need to know it's Claude Code
+or Codex ahead of time:
+
+```bash
+./cli.py analyze samples/sample_transcript_claude.jsonl -o map.html -t "my session"
+./cli.py analyze samples/sample_transcript_codex.jsonl -o map.html -t "my session"
+```
+
+Or explicit, and/or split into steps:
 
 ```bash
 ./cli.py extract --agent claude-code samples/sample_transcript_claude.jsonl -o graph.json
 ./cli.py render graph.json -o map.html -t "my session"
-
-# or, in one step:
-./cli.py map --agent codex samples/sample_transcript_codex.jsonl -o map.html -t "my session"
 ```
 
-`--agent` must be one of the keys in `rationale_map/adapters/__init__.py`'s
-`ADAPTERS` dict (currently `claude-code`, `codex`, `cursor`).
+`--agent`, when given, must be one of the keys in
+`rationale_map/adapters/__init__.py`'s `ADAPTERS` dict (currently
+`claude-code`, `codex`, `cursor`). Auto-detection (`sniff_agent`) works by
+checking the transcript's own `{"type": ...}` vocabulary — Claude Code's
+`user`/`assistant` line shape vs. Codex's `session_meta`/`response_item`/...
+shape vs. a single JSON document (Cursor's export) — and exits with a clear
+error asking for `--agent` if it can't tell.
 
 Equivalent, if you prefer running it as a module: `python3 -m rationale_map
-extract --agent ... `.
+analyze ... `. Once packaged (`pip install -e .`), the same CLI is also
+available as `why-this-file` and `rationale-map` (identical, two names for
+the same entry point — see `pyproject.toml`).
 
 The pre-refactor, single-agent scripts (`skills/change-rationale-map/scripts/extract.py`
 etc.) still work exactly as documented in `SKILL.md` — they're now thin
@@ -147,7 +162,8 @@ reused as both a manual demo and a pytest fixture — no separate
   exact required field set. This is what keeps the adapter contract honest
   as adapters are added.
 - `tests/test_cli.py` — end-to-end through the actual CLI parser
-  (extract→render, the combined `map` command, and the zero-touches path).
+  (extract→render, the combined `analyze`/`map` command, agent
+  auto-detection against every fixture, and the zero-touches path).
 
 ## How to add support for another coding agent
 

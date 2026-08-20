@@ -5,6 +5,7 @@ description = "Visualize which files a coding agent touched, and why, from its o
 requires-python = ">=3.10"
 
 [project.scripts]
+why-this-file = "rationale_map.cli:main"
 rationale-map = "rationale_map.cli:main"
 
 [build-system]

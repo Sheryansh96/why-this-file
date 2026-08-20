@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-cli.py — single entry point for the change-rationale-map project. Any
-agent (human, Claude Code, Codex, ...) can run this without reading any
-other file in the project.
+cli.py — single entry point for the why-this-file project. Any agent
+(human, Claude Code, Codex, ...) can run this without reading any other
+file in the project.
 
-    rationale-map extract --agent claude-code transcript.jsonl -o graph.json
-    rationale-map render graph.json -o map.html -t "my session"
-    rationale-map map --agent codex rollout.jsonl -o map.html -t "my session"
+    why-this-file analyze transcript.jsonl -o map.html
+    why-this-file analyze --agent codex rollout.jsonl -o map.html -t "my session"
 
-`map` is extract+render combined, for the common case of "just show me the
-graph." `extract`/`render` stay separate because graph.json is a useful,
-inspectable artifact on its own (e.g. for the tests in tests/).
+    # lower-level, if you want the intermediate graph.json:
+    why-this-file extract --agent claude-code transcript.jsonl -o graph.json
+    why-this-file render graph.json -o map.html -t "my session"
+
+`analyze` (alias: `map`) is extract+render combined and auto-detects which
+agent produced the transcript if `--agent` is omitted — the common case of
+"just show me the graph, I don't care how." `extract`/`render` stay
+separate because graph.json is a useful, inspectable artifact on its own
+(e.g. for the tests in tests/).
 """
 import argparse
 import json
@@ -19,6 +24,61 @@ import sys
 from .adapters import ADAPTERS
 from .graph import build_graph
 from .render import render
+
+# Agent detection: a session file's own {"type": ...} vocabulary is
+# disjoint enough per agent to sniff from the first parsed line, without
+# needing a --agent flag for the common case. Order matters only in that
+# each check must not false-positive on another agent's shape.
+_CLAUDE_ROLES = {"user", "assistant"}
+_CODEX_TYPES = {"session_meta", "turn_context", "response_item", "event_msg"}
+
+
+def sniff_agent(path):
+    """Best-effort agent detection from a transcript's own shape. Returns
+    an agent name from ADAPTERS, or None if it can't tell."""
+    try:
+        with open(path, "r") as f:
+            content = f.read()
+    except OSError:
+        return None
+    content = content.strip()
+    if not content:
+        return None
+
+    first_line = content.splitlines()[0].strip()
+    try:
+        first_obj = json.loads(first_line)
+    except json.JSONDecodeError:
+        first_obj = None
+    if isinstance(first_obj, dict):
+        if first_obj.get("type") in _CODEX_TYPES and "payload" in first_obj:
+            return "codex"
+        message = first_obj.get("message")
+        if first_obj.get("type") in _CLAUDE_ROLES or (
+            isinstance(message, dict) and message.get("role") in _CLAUDE_ROLES
+        ):
+            return "claude-code"
+
+    # not line-delimited JSON in a known shape — try it as one whole JSON
+    # document instead. The only adapter that reads a whole-file JSON
+    # document today is cursor's bubble export.
+    try:
+        json.loads(content)
+    except json.JSONDecodeError:
+        return None
+    return "cursor"
+
+
+def _resolve_agent(args):
+    if args.agent:
+        return args.agent
+    guess = sniff_agent(args.transcript)
+    if guess is None:
+        print(f"error: couldn't detect which agent produced {args.transcript} — pass --agent "
+              f"explicitly (one of: {', '.join(sorted(ADAPTERS))})", file=sys.stderr)
+        sys.exit(2)
+    print(f"[detected agent: {guess}]", file=sys.stderr)
+    return guess
 
 
 def _build_graph(agent, transcript):
@@ -35,14 +95,6 @@ def _build_graph(agent, transcript):
     return graph
 
 
-def _extract(args):
-    graph = _build_graph(args.agent, args.transcript)
-    with open(args.output, "w") as f:
-        json.dump(graph, f, indent=2)
-    print(f"wrote {args.output}", file=sys.stderr)
-    return graph
-
-
 def _render(args, graph_data=None):
     if graph_data is None:
         with open(args.graph) as f:
@@ -53,30 +105,48 @@ def _render(args, graph_data=None):
     print(f"wrote {args.output}", file=sys.stderr)
 
 
+def _add_analyze_like(sub, name, help_text):
+    p = sub.add_parser(name, help=help_text)
+    p.add_argument("transcript", help="path to a session transcript")
+    p.add_argument("--agent", choices=sorted(ADAPTERS), default=None,
+                    help="which agent produced this transcript; auto-detected from its "
+                         "shape if omitted")
+    p.add_argument("-o", "--output", default="map.html")
+    p.add_argument("-t", "--title", default="session")
+    p.set_defaults(func=lambda a: _render(a, graph_data=_build_graph(_resolve_agent(a), a.transcript)))
+    return p
+
+
 def build_parser():
-    ap = argparse.ArgumentParser(prog="rationale-map", description=__doc__)
+    ap = argparse.ArgumentParser(prog="why-this-file", description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
 
-    p_extract = sub.add_parser("extract", help="transcript -> graph.json")
+    _add_analyze_like(sub, "analyze", "transcript -> map.html, auto-detecting the source agent")
+    _add_analyze_like(sub, "map", "alias for `analyze`")
+
+    p_extract = sub.add_parser("extract", help="transcript -> graph.json, for inspecting the intermediate graph")
     p_extract.add_argument("transcript", help="path to a session transcript")
-    p_extract.add_argument("--agent", choices=sorted(ADAPTERS), required=True)
+    p_extract.add_argument("--agent", choices=sorted(ADAPTERS), default=None,
+                            help="which agent produced this transcript; auto-detected from its "
+                                 "shape if omitted")
     p_extract.add_argument("-o", "--output", default="graph.json")
     p_extract.set_defaults(func=lambda a: _extract(a))
 
-    p_render = sub.add_parser("render", help="graph.json -> map.html")
+    p_render = sub.add_parser("render", help="graph.json -> map.html (no transcript parsing involved)")
     p_render.add_argument("graph", help="path to a graph.json produced by `extract`")
     p_render.add_argument("-o", "--output", default="map.html")
     p_render.add_argument("-t", "--title", default="session")
     p_render.set_defaults(func=lambda a: _render(a))
 
-    p_map = sub.add_parser("map", help="transcript -> map.html (extract + render)")
-    p_map.add_argument("transcript", help="path to a session transcript")
-    p_map.add_argument("--agent", choices=sorted(ADAPTERS), required=True)
-    p_map.add_argument("-o", "--output", default="map.html")
-    p_map.add_argument("-t", "--title", default="session")
-    p_map.set_defaults(func=lambda a: _render(a, graph_data=_build_graph(a.agent, a.transcript)))
-
     return ap
+
+
+def _extract(args):
+    graph = _build_graph(_resolve_agent(args), args.transcript)
+    with open(args.output, "w") as f:
+        json.dump(graph, f, indent=2)
+    print(f"wrote {args.output}", file=sys.stderr)
+    return graph
 
 
 def main(argv=None):

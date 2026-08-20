@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from rationale_map.cli import build_parser
+import pytest
+
+from rationale_map.cli import build_parser, sniff_agent
 
 SAMPLES = Path(__file__).parent.parent / "samples"
 
@@ -45,3 +47,37 @@ def test_extract_reports_zero_touches_without_crashing(tmp_path, capsys):
     graph = json.loads(out.read_text())
     assert graph == {"nodes": [], "edges": []}
     assert "no file touches detected" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("fixture,expected", [
+    ("sample_transcript_claude.jsonl", "claude-code"),
+    ("sample_transcript_codex.jsonl", "codex"),
+    ("sample_transcript_cursor.json", "cursor"),
+])
+def test_sniff_agent_identifies_each_fixture(fixture, expected):
+    assert sniff_agent(SAMPLES / fixture) == expected
+
+
+def test_sniff_agent_returns_none_for_unrecognized_input(tmp_path):
+    junk = tmp_path / "junk.txt"
+    junk.write_text("not json at all\njust some log lines\n")
+    assert sniff_agent(junk) is None
+
+
+def test_analyze_auto_detects_agent_without_a_flag(tmp_path):
+    html_path = tmp_path / "map.html"
+    args = build_parser().parse_args([
+        "analyze", str(SAMPLES / "sample_transcript_claude.jsonl"), "-o", str(html_path),
+    ])
+    args.func(args)
+    assert html_path.exists()
+
+
+def test_analyze_exits_cleanly_when_agent_cannot_be_detected(tmp_path, capsys):
+    junk = tmp_path / "junk.txt"
+    junk.write_text("not a transcript")
+    args = build_parser().parse_args(["analyze", str(junk), "-o", str(tmp_path / "map.html")])
+    with pytest.raises(SystemExit) as exc_info:
+        args.func(args)
+    assert exc_info.value.code == 2
+    assert "couldn't detect" in capsys.readouterr().err

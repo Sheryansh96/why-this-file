@@ -72,6 +72,17 @@ python3 scripts/render.py graph.json -o map.html -t "<short label for header>"
 Then open `map.html` in a browser (or send it to the user with SendUserFile,
 or publish it as an Artifact).
 
+There's also a single agent-neutral entry point that auto-detects which of
+the three formats a transcript is, so callers don't need to know or specify
+`--agent`:
+
+```bash
+python3 -m rationale_map analyze <transcript> -o map.html -t "<label>"
+```
+
+(equivalent to the per-agent commands above, chained; see the repo root's
+`AGENTS.md` for the full CLI and how detection works)
+
 ## Notes
 
 - No external Python deps. `render.py` bundles D3 (`scripts/d3.min.js`)
