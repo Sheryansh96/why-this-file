@@ -30,15 +30,22 @@ renderer:
 
 ## How it works
 
-1. One of the `extract_*.py` scripts parses the transcript and emits a graph
-   (`graph.json`): nodes = files (with a timeline of touches + reasoning),
-   edges = same-turn co-occurrence or cross-file references found in
-   reasoning text. All three extractors share `build_graph`/`clean_reasoning`
-   from `extract.py` so the graph shape is identical regardless of source.
-2. `render.py` renders `graph.json` into a self-contained `map.html` (D3.js
-   force-directed graph, dark theme, file sidebar + detail panel with the
-   full reasoning timeline for the selected file). `render.py` is
-   source-agnostic — it only ever reads `graph.json`.
+The real implementation lives in `scripts/rationale_map/` (an agent-neutral
+core + one adapter per agent — see the repo root's `AGENTS.md` for the full
+architecture and how to add another agent). `extract.py`/`extract_codex.py`/
+`extract_cursor.py`/`render.py` in this directory are thin, CLI-compatible
+wrappers kept so the commands below never change:
+
+1. An adapter (`rationale_map/adapters/<agent>.py`) parses the transcript
+   into a small normalized representation, then `rationale_map/graph.py`
+   turns that into a graph (`graph.json`): nodes = files (with a timeline
+   of touches + reasoning), edges = same-turn co-occurrence or cross-file
+   references found in reasoning text. Agent-neutral — it never branches
+   on which agent produced the transcript.
+2. `rationale_map/render.py` renders `graph.json` into a self-contained
+   `map.html` (D3.js force-directed graph, dark theme, file sidebar +
+   detail panel with the full reasoning timeline for the selected file).
+   Also agent-neutral — it only ever reads `graph.json`.
 
 ## Identifying the source
 
@@ -74,10 +81,12 @@ or publish it as an Artifact).
 - If the user doesn't specify an output location, write `graph.json` and
   `map.html` next to the input transcript, or in the current working
   directory if that's not writable.
-- `extract_codex.py` infers file touches from `apply_patch` calls (reliable)
-  or shell-idiom regexes (`sed -i`, `cat >`, `tee`, `mv`, `cp` — best-effort,
-  since Codex has no dedicated Edit/Write tool). If a session shows 0
-  touches, the session likely used a shell pattern the regexes don't cover.
+- `extract_codex.py` infers file touches from `apply_patch` calls (reliable
+  — this is Codex's dedicated patch tool, verified against real rollout
+  files) or shell-idiom regexes (`sed -i`, `cat >`, `tee`, `mv`, `cp` —
+  best-effort, since a raw shell call has no structured file-path field).
+  If a session shows 0 touches, it likely edited files through a shell
+  pattern the regexes don't cover.
 - `extract_cursor.py` is a best-effort adapter: Cursor has no documented
   transcript schema (chat lives in a SQLite DB, and the schema has already
   changed across versions), so it tries several plausible field names

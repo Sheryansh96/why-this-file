@@ -1,52 +1,54 @@
 # why-this-file
 
-A Claude Code plugin that turns a coding-agent session transcript into a
-standalone, interactive HTML graph showing which files were touched, why
-(the agent's own reasoning right before each tool call), and how the
-touches relate to each other (same-turn co-occurrence, or one file's
-rationale referencing another file by name).
+Turns a coding-agent session transcript into a standalone, interactive HTML
+graph showing which files were touched, why (the agent's own reasoning
+right before each tool call), and how the touches relate to each other
+(same-turn co-occurrence, or one file's rationale referencing another file
+by name).
 
-Supports transcripts from **Claude Code**, **OpenAI Codex CLI**, and
-**Cursor** (via community export) — each has its own extractor, all
-feeding the same renderer.
+Agent-agnostic by design: a small normalized intermediate representation
+sits between agent-specific transcript parsing and the graph/rendering
+logic, so adding a new agent means writing one adapter, not touching the
+core. Supports **Claude Code**, **OpenAI Codex CLI** (verified against real
+rollout files), and **Cursor** (best-effort, unverified — see
+`AGENTS.md`). Distributed both as a Claude Code plugin/skill and as a
+plain CLI any agent can run directly.
 
-## Install
+Full architecture, data flow, and "how to add another agent" writeup:
+**[AGENTS.md](./AGENTS.md)**.
 
-Add this repo as a plugin marketplace, then install the plugin:
+## Use directly (any agent, any terminal)
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install pytest   # only needed to run tests
+./cli.py map --agent claude-code samples/sample_transcript_claude.jsonl -o map.html -t "my session"
+./cli.py map --agent codex samples/sample_transcript_codex.jsonl -o map.html -t "my session"
+```
+
+## Install as a Claude Code plugin
 
 ```
 /plugin marketplace add Sheryansh96/why-this-file
 /plugin install change-rationale-map@why-this-file
 ```
 
-## Use
-
 Once installed, the `change-rationale-map` skill activates automatically
 when you ask Claude to visualize, map, or explain why a session touched
-the files it did — or invoke it directly:
-
-```bash
-# Claude Code transcript
-python3 skills/change-rationale-map/scripts/extract.py transcript.jsonl -o graph.json
-
-# OpenAI Codex CLI rollout
-python3 skills/change-rationale-map/scripts/extract_codex.py rollout.jsonl -o graph.json
-
-# Cursor session (export first with the community `cursor-session` tool)
-python3 skills/change-rationale-map/scripts/extract_cursor.py session.json -o graph.json
-
-# then, regardless of source:
-python3 skills/change-rationale-map/scripts/render.py graph.json -o map.html -t "my session"
-```
-
-Open `map.html` in a browser, or ask Claude to publish it as an Artifact.
+the files it did — or invoke it directly with the same CLI commands
+documented in `SKILL.md`.
 
 ## Repo layout
 
+- `AGENTS.md` — architecture, data flow, how to run/test, how to add an agent
+- `rationale_map/` — symlink to the actual package (see AGENTS.md for why)
+- `cli.py` — repo-root CLI entry point
 - `.claude-plugin/marketplace.json` — marketplace catalog (lists this plugin)
 - `.claude-plugin/plugin.json` — plugin manifest
-- `skills/change-rationale-map/` — the skill (`SKILL.md` + scripts)
-- `.claude/skills/change-rationale-map/` — same skill, auto-loaded for anyone
+- `skills/change-rationale-map/` — canonical source: the skill (`SKILL.md`)
+  and the `rationale_map` package it wraps
+- `.claude/skills/change-rationale-map/` — mirror, auto-loaded for anyone
   working directly in this repo (no plugin install needed)
-- `samples/` — one example transcript per source (Claude Code, Codex CLI,
-  Cursor), useful for trying the scripts or as test fixtures
+- `samples/` — one example transcript per agent, used both as a manual demo
+  and as pytest fixtures
+- `tests/` — pytest suite (IR, graph builder, each adapter, the adapter
+  boundary contract, and the CLI end-to-end)
