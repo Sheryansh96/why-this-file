@@ -33,6 +33,12 @@ _CLAUDE_ROLES = {"user", "assistant"}
 _CODEX_TYPES = {"session_meta", "turn_context", "response_item", "event_msg"}
 
 
+_SNIFF_LINES = 50  # real Claude Code sessions prepend several non-conversation
+                    # control lines ({"type":"mode",...}, {"type":"bridge-session",...},
+                    # etc.) before the first actual user/assistant message, so checking
+                    # only line 1 misses them — scan a window instead.
+
+
 def sniff_agent(path):
     """Best-effort agent detection from a transcript's own shape. Returns
     an agent name from ADAPTERS, or None if it can't tell."""
@@ -45,23 +51,30 @@ def sniff_agent(path):
     if not content:
         return None
 
-    first_line = content.splitlines()[0].strip()
-    try:
-        first_obj = json.loads(first_line)
-    except json.JSONDecodeError:
-        first_obj = None
-    if isinstance(first_obj, dict):
-        if first_obj.get("type") in _CODEX_TYPES and "payload" in first_obj:
+    lines = content.splitlines()
+    for line in lines[:_SNIFF_LINES]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        if obj.get("type") in _CODEX_TYPES and "payload" in obj:
             return "codex"
-        message = first_obj.get("message")
-        if first_obj.get("type") in _CLAUDE_ROLES or (
+        message = obj.get("message")
+        if obj.get("type") in _CLAUDE_ROLES or (
             isinstance(message, dict) and message.get("role") in _CLAUDE_ROLES
         ):
             return "claude-code"
 
-    # not line-delimited JSON in a known shape — try it as one whole JSON
-    # document instead. The only adapter that reads a whole-file JSON
-    # document today is cursor's bubble export.
+    # nothing in the scanned window matched a known JSONL shape — try the
+    # file as one whole JSON document instead. The only adapter that reads
+    # a whole-file JSON document today is cursor's bubble export. A real
+    # multi-line JSONL file will fail this (json.loads chokes on the
+    # second top-level value), so it's a safe fallback either way.
     try:
         json.loads(content)
     except json.JSONDecodeError:

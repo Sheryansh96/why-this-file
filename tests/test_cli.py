@@ -58,6 +58,19 @@ def test_sniff_agent_identifies_each_fixture(fixture, expected):
     assert sniff_agent(SAMPLES / fixture) == expected
 
 
+def test_sniff_agent_skips_leading_control_lines(tmp_path):
+    # real Claude Code session files prepend several non-conversation
+    # control lines ({"type":"mode",...}, {"type":"bridge-session",...})
+    # before the first actual message — detection must look past them.
+    f = tmp_path / "real_shaped.jsonl"
+    f.write_text(
+        '{"type":"mode","mode":"normal","sessionId":"x"}\n'
+        '{"type":"permission-mode","permissionMode":"auto","sessionId":"x"}\n'
+        '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n'
+    )
+    assert sniff_agent(f) == "claude-code"
+
+
 def test_sniff_agent_returns_none_for_unrecognized_input(tmp_path):
     junk = tmp_path / "junk.txt"
     junk.write_text("not json at all\njust some log lines\n")
