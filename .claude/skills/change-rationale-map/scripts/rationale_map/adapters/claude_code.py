@@ -68,6 +68,15 @@ def parse(path) -> Session:
 
     session = Session(agent="claude-code", source=str(path))
     turn = None
+    # Persists across assistant messages within a turn, not just within one
+    # message: real sessions routinely narrate in one assistant message
+    # ("Let me look at X...") and then issue tool calls in several
+    # subsequent, text-free assistant messages — text and tool_use rarely
+    # share a single message the way the original hand-written sample
+    # fixture assumed. Resetting this per-message (as an earlier version of
+    # this adapter did) silently dropped almost all rationale on real
+    # transcripts. It only resets at a turn boundary (a new user message).
+    pending_reasoning = ""
 
     for raw in raw_events:
         msg = raw.get("message", {})
@@ -83,6 +92,7 @@ def parse(path) -> Session:
             )
             turn = Turn(index=len(session.turns), user_request=text or None)
             session.turns.append(turn)
+            pending_reasoning = ""
             continue
 
         if role != "assistant":
@@ -91,7 +101,6 @@ def parse(path) -> Session:
             turn = Turn(index=0)
             session.turns.append(turn)
 
-        pending_reasoning = ""
         for block in content:
             if not isinstance(block, dict):
                 continue

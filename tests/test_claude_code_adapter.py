@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from rationale_map.adapters import claude_code
@@ -54,6 +55,37 @@ def test_routes_py_touched_in_both_turns_write_then_fix():
     assert [e["turn"] for e in events] == [0, 1]
     assert events[0]["action"] == "write"
     assert events[1]["action"] == "write"
+
+
+def test_rationale_carries_across_a_text_only_message_into_later_tool_only_messages(tmp_path):
+    # Real Claude Code sessions routinely narrate in one assistant message
+    # and then issue tool calls in several separate, text-free assistant
+    # messages afterward — text and tool_use rarely share a message the way
+    # the hand-written sample fixture does. Regression test for a bug where
+    # rationale was reset per-message and so silently dropped on exactly
+    # this (very common, in real sessions) pattern.
+    lines = [
+        {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "add three files"}]}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "I'll create a.py, b.py, and c.py for this."},
+        ]}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t1", "name": "Write", "input": {"file_path": "/repo/a.py"}},
+        ]}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t2", "name": "Write", "input": {"file_path": "/repo/b.py"}},
+        ]}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t3", "name": "Write", "input": {"file_path": "/repo/c.py"}},
+        ]}},
+    ]
+    f = tmp_path / "split_reasoning.jsonl"
+    f.write_text("\n".join(json.dumps(l) for l in lines))
+
+    session = claude_code.parse(f)
+    events = list(session.file_events())
+    assert [e["file"] for e in events] == ["/repo/a.py", "/repo/b.py", "/repo/c.py"]
+    assert all("a.py, b.py, and c.py" in e["reasoning"] for e in events)
 
 
 def test_end_to_end_graph_shape_matches_known_good_output():
