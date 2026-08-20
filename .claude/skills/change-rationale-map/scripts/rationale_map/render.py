@@ -30,14 +30,15 @@ TEMPLATE = r"""<!DOCTYPE html>
   header .title .dim{color:var(--dim); font-weight:400;}
   header .stats{display:flex; gap:18px; font-family:var(--mono); font-size:11px; color:var(--muted);}
   header .stats b{color:var(--text); font-weight:600;}
-  #sidebar{border-right:1px solid var(--line); overflow-y:auto; padding:14px 0;}
+  #sidebar{grid-column:1; grid-row:2; border-right:1px solid var(--line); overflow-y:auto; padding:14px 0;}
   #sidebar .section-label{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); padding:6px 16px; margin-top:6px;}
   .file-row{display:flex; align-items:center; gap:8px; padding:7px 16px; cursor:pointer; border-left:2px solid transparent; font-family:var(--mono); font-size:12px; color:var(--muted);}
   .file-row:hover{background:var(--panel-2); color:var(--text);}
   .file-row.active{background:var(--panel-2); border-left-color:var(--write); color:var(--text);}
   .file-row .dot{width:6px; height:6px; border-radius:50%; flex-shrink:0;}
   .file-row .count{margin-left:auto; color:var(--dim); font-size:10px;}
-  #canvas-wrap{position:relative; overflow:hidden;}
+  #canvas-wrap{grid-column:2; grid-row:2; position:relative; overflow:hidden;}
+  #timeline-wrap{grid-column:2; grid-row:2;}
   #canvas-wrap svg{width:100%; height:100%; display:block;}
   .node-rect{fill:var(--panel-2); stroke:var(--line); stroke-width:1; rx:4;}
   .node-rect.active{stroke:var(--write); stroke-width:1.5;}
@@ -50,7 +51,7 @@ TEMPLATE = r"""<!DOCTYPE html>
   .edge.dim{opacity:.08;}
   .legend{position:absolute; left:14px; bottom:14px; font-family:var(--mono); font-size:10px; color:var(--muted); background:var(--panel); border:1px solid var(--line); padding:10px 12px; border-radius:6px; line-height:1.9;}
   .legend .sw{display:inline-block; width:14px; height:2px; margin-right:6px; vertical-align:middle;}
-  #detail{border-left:1px solid var(--line); padding:18px 18px; overflow-y:auto;}
+  #detail{grid-column:3; grid-row:2; border-left:1px solid var(--line); padding:18px 18px; overflow-y:auto;}
   #detail .empty{color:var(--dim); font-size:12px; margin-top:40px; text-align:center; line-height:1.6;}
   #detail .file-path{font-family:var(--mono); font-size:12px; color:var(--text); word-break:break-all; line-height:1.5; padding-bottom:10px; border-bottom:1px solid var(--line); margin-bottom:14px;}
   #detail .badge-row{display:flex; gap:6px; margin-top:8px;}
@@ -67,12 +68,52 @@ TEMPLATE = r"""<!DOCTYPE html>
   .timeline-reason.none{color:var(--dim); font-style:italic;}
   #detail .section-label{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:18px 0 10px;}
   ::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+
+  .view-toggle{display:flex; gap:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:2px;}
+  .view-toggle button{
+    font-family:var(--mono); font-size:11px; color:var(--muted); background:transparent; border:none;
+    padding:5px 12px; border-radius:4px; cursor:pointer; letter-spacing:.02em;
+  }
+  .view-toggle button.active{background:var(--panel); color:var(--text);}
+  .view-toggle button:hover:not(.active){color:var(--text);}
+
+  #timeline-wrap{height:100%; overflow-y:auto; padding:22px 28px 60px;}
+  #timeline-wrap.hidden, #canvas-wrap.hidden{display:none;}
+  .tl-turn-head{
+    display:flex; align-items:center; gap:10px; margin:26px 0 12px; font-family:var(--mono);
+  }
+  .tl-turn-head:first-child{margin-top:0;}
+  .tl-turn-head .tl-turn-label{
+    font-size:10px; letter-spacing:.1em; color:var(--dim); text-transform:uppercase; white-space:nowrap;
+  }
+  .tl-turn-head::after{content:''; flex:1; height:1px; background:var(--line);}
+  .tl-row{
+    display:grid; grid-template-columns:22px 1fr; gap:12px; padding:10px 12px; margin-bottom:4px;
+    border-radius:6px; cursor:pointer; border:1px solid transparent;
+  }
+  .tl-row:hover{background:var(--panel-2);}
+  .tl-row.active{background:var(--panel-2); border-color:var(--write);}
+  .tl-rail{display:flex; flex-direction:column; align-items:center;}
+  .tl-dot{width:9px; height:9px; border-radius:50%; margin-top:3px; flex-shrink:0;}
+  .tl-dot.write{background:var(--write);}
+  .tl-dot.read{background:var(--read);}
+  .tl-line{width:1px; flex:1; background:var(--line); margin-top:4px;}
+  .tl-row:last-child .tl-line{display:none;}
+  .tl-head-row{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;}
+  .tl-file{font-family:var(--mono); font-size:12.5px; color:var(--text); font-weight:600;}
+  .tl-tool{font-family:var(--mono); font-size:9.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.04em;}
+  .tl-reason{font-size:12.5px; color:var(--muted); line-height:1.55; margin-top:4px;}
+  .tl-reason.none{font-style:italic; color:var(--dim);}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
     <div class="title">Change Rationale Map <span class="dim">/ __GRAPH_TITLE__</span></div>
+    <div class="view-toggle" id="view-toggle">
+      <button data-view="timeline" class="active">Timeline</button>
+      <button data-view="graph">Graph</button>
+    </div>
     <div class="stats">
       <span><b id="stat-files">0</b> files touched</span>
       <span><b id="stat-turns">0</b> turns</span>
@@ -83,7 +124,8 @@ TEMPLATE = r"""<!DOCTYPE html>
     <div class="section-label">Files (by first touch)</div>
     <div id="file-list"></div>
   </div>
-  <div id="canvas-wrap">
+  <div id="timeline-wrap"></div>
+  <div id="canvas-wrap" class="hidden">
     <svg id="graph"></svg>
     <div class="legend">
       <div><span class="sw" style="background:var(--write)"></span>same-turn causality</div>
@@ -91,7 +133,7 @@ TEMPLATE = r"""<!DOCTYPE html>
       <div style="margin-top:6px;"><span class="sw" style="background:var(--write); height:8px; border-radius:2px;"></span>write &nbsp;&nbsp;<span class="sw" style="background:var(--read); height:8px; border-radius:2px;"></span>read-only</div>
     </div>
   </div>
-  <div id="detail"><div class="empty">Click a file — in the graph or the list — to see why it was touched, in the order it happened.</div></div>
+  <div id="detail"><div class="empty">Click a step in the timeline — or a file in the graph or the list — to see it here.</div></div>
 </div>
 
 <script>
@@ -117,6 +159,39 @@ sortedNodes.forEach(n => {
   row.onclick = () => selectNode(n.id);
   fileList.appendChild(row);
 });
+
+// ---- timeline (default view): every touch, in the order it happened ----
+const timelineWrap = document.getElementById('timeline-wrap');
+const sequence = graph.sequence || [];
+
+function renderTimeline(){
+  timelineWrap.innerHTML = '';
+  let lastTurn = null;
+  sequence.forEach((t, i) => {
+    if (t.turn !== lastTurn) {
+      lastTurn = t.turn;
+      const head = document.createElement('div');
+      head.className = 'tl-turn-head';
+      head.innerHTML = `<span class="tl-turn-label">Turn ${t.turn}</span>`;
+      timelineWrap.appendChild(head);
+    }
+    const row = document.createElement('div');
+    row.className = 'tl-row';
+    row.dataset.id = t.file;
+    row.innerHTML = `
+      <div class="tl-rail"><span class="tl-dot ${t.action}"></span><span class="tl-line"></span></div>
+      <div>
+        <div class="tl-head-row">
+          <span class="tl-file">${t.label}</span>
+          <span class="tl-tool">${t.action} · ${t.tool}</span>
+        </div>
+        <div class="tl-reason ${t.reasoning ? '' : 'none'}">${t.reasoning || 'no explicit reasoning captured before this call'}</div>
+      </div>`;
+    row.onclick = () => selectNode(t.file);
+    timelineWrap.appendChild(row);
+  });
+}
+renderTimeline();
 
 // ---- graph ----
 const svg = d3.select('#graph');
@@ -193,6 +268,7 @@ let selected = null;
 function selectNode(id){
   selected = id;
   document.querySelectorAll('.file-row').forEach(r => r.classList.toggle('active', r.dataset.id === id));
+  document.querySelectorAll('.tl-row').forEach(r => r.classList.toggle('active', r.dataset.id === id));
   nodeSel.select('rect.node-rect').classed('active', d => d.id === id);
   edgeSel.classed('dim', d => d.source.id !== id && d.target.id !== id);
   renderDetail(id);
@@ -215,11 +291,29 @@ function renderDetail(id){
   `;
 }
 
-window.addEventListener('resize', () => {
+function resizeGraph(){
   width = wrap.clientWidth; height = wrap.clientHeight;
   svg.attr('viewBox', [0,0,width,height]);
   sim.force('center', d3.forceCenter(width/2, height/2));
   sim.alpha(0.3).restart();
+}
+window.addEventListener('resize', resizeGraph);
+
+// ---- view toggle: graph starts hidden (0×0), so its force simulation
+// needs a real resize once it's actually shown, not just on window resize ----
+const viewToggle = document.getElementById('view-toggle');
+let graphEverShown = false;
+viewToggle.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-view]');
+  if (!btn) return;
+  const view = btn.dataset.view;
+  viewToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  timelineWrap.classList.toggle('hidden', view !== 'timeline');
+  document.getElementById('canvas-wrap').classList.toggle('hidden', view !== 'graph');
+  if (view === 'graph' && !graphEverShown) {
+    graphEverShown = true;
+    resizeGraph();
+  }
 });
 </script>
 </body>

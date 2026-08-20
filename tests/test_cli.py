@@ -45,7 +45,7 @@ def test_extract_reports_zero_touches_without_crashing(tmp_path, capsys):
     args = build_parser().parse_args(["extract", "--agent", "cursor", str(empty), "-o", str(out)])
     args.func(args)
     graph = json.loads(out.read_text())
-    assert graph == {"nodes": [], "edges": []}
+    assert graph == {"nodes": [], "edges": [], "sequence": []}
     assert "no file touches detected" in capsys.readouterr().err
 
 

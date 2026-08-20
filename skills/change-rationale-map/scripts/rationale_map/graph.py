@@ -103,4 +103,21 @@ def _build_graph_from_touches(touches):
         for (a, b, typ), w in edge_weights.items()
     ]
 
-    return {"nodes": node_list, "edges": edges}
+    # the same touches, globally ordered rather than grouped per file — this
+    # is what a sequential/timeline view reads directly, since the graph's
+    # nodes/edges shape answers "how do files relate" but not "what actually
+    # happened, in order," which is the harder-to-reconstruct question.
+    sequence = [
+        {
+            "order": t["order"],
+            "turn": t["turn"],
+            "file": t["file"],
+            "label": short_name(t["file"]),
+            "action": t["action"],
+            "tool": t["tool"],
+            "reasoning": t["reasoning"],
+        }
+        for t in sorted(touches, key=lambda x: x["order"])
+    ]
+
+    return {"nodes": node_list, "edges": edges, "sequence": sequence}
