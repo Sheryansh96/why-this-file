@@ -48,5 +48,5 @@ Open `map.html` in a browser, or ask Claude to publish it as an Artifact.
 - `skills/change-rationale-map/` — the skill (`SKILL.md` + scripts)
 - `.claude/skills/change-rationale-map/` — same skill, auto-loaded for anyone
   working directly in this repo (no plugin install needed)
-- `files/` — original Claude Code scripts and a sample transcript, kept for reference
-- `files_2/` — Codex/Cursor adapter source and sample transcripts, kept for reference
+- `samples/` — one example transcript per source (Claude Code, Codex CLI,
+  Cursor), useful for trying the scripts or as test fixtures
