@@ -1,0 +1,14 @@
+{
+  "name": "why-this-file",
+  "owner": {
+    "name": "Shreyas",
+    "email": "ushreyansh96@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "change-rationale-map",
+      "source": "./",
+      "description": "Visualize a Claude Code session transcript as an interactive graph of which files were touched, why, and how the touches relate."
+    }
+  ]
+}

@@ -8,8 +8,12 @@ rationale referencing another file by name).
 
 ## Install
 
-Point Claude Code at this repo as a plugin source, per the Claude Code
-plugin docs, then enable the `change-rationale-map` plugin.
+Add this repo as a plugin marketplace, then install the plugin:
+
+```
+/plugin marketplace add Sheryansh96/why-this-file
+/plugin install change-rationale-map@why-this-file
+```
 
 ## Use
 
@@ -26,6 +30,7 @@ Open `map.html` in a browser, or ask Claude to publish it as an Artifact.
 
 ## Repo layout
 
+- `.claude-plugin/marketplace.json` — marketplace catalog (lists this plugin)
 - `.claude-plugin/plugin.json` — plugin manifest
 - `skills/change-rationale-map/` — the skill (`SKILL.md` + scripts)
 - `.claude/skills/change-rationale-map/` — same skill, auto-loaded for anyone
