@@ -40,15 +40,19 @@ TEMPLATE = r"""<!DOCTYPE html>
   #canvas-wrap{grid-column:2; grid-row:2; position:relative; overflow:hidden;}
   #timeline-wrap{grid-column:2; grid-row:2;}
   #canvas-wrap svg{width:100%; height:100%; display:block;}
-  .node-rect{fill:var(--panel-2); stroke:var(--line); stroke-width:1; rx:4;}
-  .node-rect.active{stroke:var(--write); stroke-width:1.5;}
-  .node-bar{}
-  .node-label{fill:var(--text); font-family:var(--mono); font-size:11px; pointer-events:none;}
-  .node-sub{fill:var(--dim); font-family:var(--mono); font-size:9px; pointer-events:none;}
+  .lane-guide{stroke:var(--line); stroke-width:1.5;}
+  .lane-label{fill:var(--muted); font-family:var(--mono); font-size:11px;}
+  .turn-tick{stroke:var(--line); stroke-width:1; stroke-dasharray:2,3; opacity:.7;}
+  .turn-tick-label{fill:var(--dim); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.04em;}
+  .touch-dot{stroke:var(--bg); stroke-width:1.5; cursor:pointer;}
+  .touch-dot.write{fill:var(--write);}
+  .touch-dot.read{fill:var(--read);}
+  .touch-dot.active{stroke:var(--text); stroke-width:2; r:7;}
+  .touch-dot.dim{opacity:.2;}
   .edge{fill:none; stroke-width:1.4;}
-  .edge.same-turn{stroke:var(--write); opacity:.55;}
-  .edge.referenced{stroke:var(--ref); stroke-dasharray:2,3; opacity:.6;}
-  .edge.dim{opacity:.08;}
+  .edge.same-turn{stroke:var(--write); opacity:.6;}
+  .edge.referenced{stroke:var(--ref); stroke-dasharray:2,3; opacity:.65;}
+  .edge.dim{opacity:.06;}
   .legend{position:absolute; left:14px; bottom:14px; font-family:var(--mono); font-size:10px; color:var(--muted); background:var(--panel); border:1px solid var(--line); padding:10px 12px; border-radius:6px; line-height:1.9;}
   .legend .sw{display:inline-block; width:14px; height:2px; margin-right:6px; vertical-align:middle;}
   #detail{grid-column:3; grid-row:2; border-left:1px solid var(--line); padding:18px 18px; overflow-y:auto;}
@@ -193,84 +197,112 @@ function renderTimeline(){
 }
 renderTimeline();
 
-// ---- graph ----
+// ---- graph: a sequential lane diagram, not a physics simulation ----
+// x = when it happened (touch order, left to right); y = which file (a fixed
+// lane, ordered by first touch, top to bottom). Position IS the timeline —
+// nothing moves or settles, so there's nothing to read except the layout.
 const svg = d3.select('#graph');
 const wrap = document.getElementById('canvas-wrap');
-let width = wrap.clientWidth, height = wrap.clientHeight;
-svg.attr('viewBox', [0,0,width,height]);
-
 const g = svg.append('g');
-svg.call(d3.zoom().scaleExtent([0.3, 3]).on('zoom', (ev) => g.attr('transform', ev.transform)));
+svg.call(d3.zoom().scaleExtent([0.3, 4]).on('zoom', (ev) => g.attr('transform', ev.transform)));
 
 svg.append('defs').append('marker')
-  .attr('id','arrow').attr('viewBox','0 -4 8 8').attr('refX', 22).attr('refY',0)
+  .attr('id','arrow').attr('viewBox','0 -4 8 8').attr('refX', 7).attr('refY',0)
   .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
-  .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','var(--write)').attr('opacity',0.7);
+  .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','var(--write)').attr('opacity',0.8);
 
-const nodeW = d => Math.max(90, d.label.length * 6.6 + 22);
-const nodeH = 34;
+const laneOrder = sortedNodes.map(n => n.id);           // top-to-bottom, by first touch
+const laneIndex = new Map(laneOrder.map((id,i) => [id,i]));
+const laneHeight = 42, marginTop = 44, marginLeft = 190, marginRight = 40;
+const maxOrder = Math.max(1, ...sequence.map(t => t.order));
+const touchesOf = new Map(laneOrder.map(id => [id, sequence.filter(t => t.file === id)]));
 
-const sim = d3.forceSimulation(graph.nodes)
-  .force('link', d3.forceLink(graph.edges).id(d => d.id).distance(150).strength(0.35))
-  .force('charge', d3.forceManyBody().strength(-420))
-  .force('center', d3.forceCenter(width/2, height/2))
-  .force('collide', d3.forceCollide().radius(d => nodeW(d)/2 + 24));
+let xScale, nodeSel, edgeSel;
 
-const edgeSel = g.append('g').selectAll('path')
-  .data(graph.edges).join('path')
-  .attr('class', d => 'edge ' + d.type)
-  .attr('marker-end', d => d.type === 'same-turn' ? 'url(#arrow)' : null);
-
-const nodeSel = g.append('g').selectAll('g.node')
-  .data(graph.nodes).join('g')
-  .attr('class','node')
-  .style('cursor','pointer')
-  .call(d3.drag()
-    .on('start', (ev,d) => { if(!ev.active) sim.alphaTarget(0.25).restart(); d.fx=d.x; d.fy=d.y; })
-    .on('drag', (ev,d) => { d.fx=ev.x; d.fy=ev.y; })
-    .on('end', (ev,d) => { if(!ev.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
-  .on('click', (ev,d) => selectNode(d.id));
-
-nodeSel.append('rect')
-  .attr('class','node-rect')
-  .attr('width', d => nodeW(d)).attr('height', nodeH)
-  .attr('x', d => -nodeW(d)/2).attr('y', -nodeH/2)
-  .attr('rx', 4);
-
-nodeSel.append('rect')
-  .attr('class','node-bar')
-  .attr('width', d => nodeW(d)).attr('height', 3)
-  .attr('x', d => -nodeW(d)/2).attr('y', -nodeH/2)
-  .attr('fill', d => d.actions.includes('write') ? 'var(--write)' : 'var(--read)');
-
-nodeSel.append('text')
-  .attr('class','node-label')
-  .attr('text-anchor','middle').attr('y', -2)
-  .text(d => d.label);
-
-nodeSel.append('text')
-  .attr('class','node-sub')
-  .attr('text-anchor','middle').attr('y', 11)
-  .text(d => `${d.touch_count}× · turn ${d.turns[0]}`);
-
-function linkPath(d){
-  const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
-  const dr = Math.sqrt(dx*dx+dy*dy) * 1.4;
-  return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+// for a "same-turn" edge, anchor it at a turn the two files actually shared;
+// for a "referenced" edge (no shared-turn guarantee), anchor at the target's
+// first touch and the nearest source touch at or before it.
+function anchorsFor(e){
+  if (e.type === 'same-turn') {
+    const turnsOfSource = new Map();
+    touchesOf.get(e.source).forEach(t => { if (!turnsOfSource.has(t.turn)) turnsOfSource.set(t.turn, t); });
+    const shared = touchesOf.get(e.target).find(t => turnsOfSource.has(t.turn));
+    if (shared) return [turnsOfSource.get(shared.turn), shared];
+  }
+  const targetTouch = touchesOf.get(e.target)[0] || touchesOf.get(e.source)[0];
+  const before = touchesOf.get(e.source).filter(t => t.order <= targetTouch.order);
+  const sourceTouch = before.length ? before[before.length - 1] : touchesOf.get(e.source)[0];
+  return [sourceTouch, targetTouch];
 }
 
-sim.on('tick', () => {
-  edgeSel.attr('d', linkPath);
-  nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
-});
+function edgePath(e){
+  const [a, b] = anchorsFor(e);
+  const x1 = xScale(a.order), y1 = marginTop + laneIndex.get(a.file) * laneHeight;
+  const x2 = xScale(b.order), y2 = marginTop + laneIndex.get(b.file) * laneHeight;
+  const xm = (x1 + x2) / 2;
+  return `M${x1},${y1} C${xm},${y1} ${xm},${y2} ${x2},${y2}`;
+}
+
+function renderGraph(){
+  const width = Math.max(wrap.clientWidth, 200);
+  const plotWidth = Math.max(160, width - marginLeft - marginRight);
+  xScale = d3.scaleLinear().domain([1, maxOrder]).range([marginLeft, marginLeft + plotWidth]);
+  const totalHeight = marginTop + laneOrder.length * laneHeight + 24;
+  svg.attr('viewBox', [0, 0, width, Math.max(wrap.clientHeight, totalHeight)]);
+  g.selectAll('*').remove();
+
+  // lanes: guide line spanning each file's own first→last touch, + label
+  const laneG = g.append('g');
+  sortedNodes.forEach((n, i) => {
+    const touches = touchesOf.get(n.id);
+    const y = marginTop + i * laneHeight;
+    laneG.append('line').attr('class', 'lane-guide')
+      .attr('x1', xScale(touches[0].order)).attr('x2', xScale(touches[touches.length - 1].order))
+      .attr('y1', y).attr('y2', y);
+    laneG.append('text').attr('class', 'lane-label')
+      .attr('x', marginLeft - 14).attr('y', y + 4).attr('text-anchor', 'end')
+      .text(n.label).append('title').text(n.id);
+  });
+
+  // turn axis: one dashed vertical line + label per turn, at its first touch
+  const turnG = g.append('g');
+  const seenTurns = new Set();
+  sequence.forEach(t => {
+    if (seenTurns.has(t.turn)) return;
+    seenTurns.add(t.turn);
+    const x = xScale(t.order);
+    turnG.append('line').attr('class', 'turn-tick')
+      .attr('x1', x).attr('x2', x).attr('y1', marginTop - 20).attr('y2', marginTop + laneOrder.length * laneHeight - laneHeight/2);
+    turnG.append('text').attr('class', 'turn-tick-label')
+      .attr('x', x).attr('y', marginTop - 26).attr('text-anchor', 'middle')
+      .text('T' + t.turn);
+  });
+
+  edgeSel = g.append('g').selectAll('path')
+    .data(graph.edges).join('path')
+    .attr('class', d => 'edge ' + d.type)
+    .attr('marker-end', d => d.type === 'same-turn' ? 'url(#arrow)' : null)
+    .attr('d', edgePath);
+
+  nodeSel = g.append('g').selectAll('circle.touch-dot')
+    .data(sequence).join('circle')
+    .attr('class', d => 'touch-dot ' + d.action)
+    .attr('r', 5)
+    .attr('cx', d => xScale(d.order))
+    .attr('cy', d => marginTop + laneIndex.get(d.file) * laneHeight)
+    .on('click', (ev, d) => selectNode(d.file))
+    .append('title').text(d => `turn ${d.turn} · ${d.action} · ${d.tool}`);
+  nodeSel = g.selectAll('circle.touch-dot'); // re-grab: .append('title') above returns the titles, not the circles
+}
+window.addEventListener('resize', () => { if (!wrap.classList.contains('hidden')) renderGraph(); });
 
 let selected = null;
 function selectNode(id){
   selected = id;
   document.querySelectorAll('.file-row').forEach(r => r.classList.toggle('active', r.dataset.id === id));
   document.querySelectorAll('.tl-row').forEach(r => r.classList.toggle('active', r.dataset.id === id));
-  nodeSel.select('rect.node-rect').classed('active', d => d.id === id);
-  edgeSel.classed('dim', d => d.source.id !== id && d.target.id !== id);
+  if (nodeSel) nodeSel.classed('active', d => d.file === id).classed('dim', d => d.file !== id);
+  if (edgeSel) edgeSel.classed('dim', d => d.source !== id && d.target !== id);
   renderDetail(id);
 }
 
@@ -291,16 +323,8 @@ function renderDetail(id){
   `;
 }
 
-function resizeGraph(){
-  width = wrap.clientWidth; height = wrap.clientHeight;
-  svg.attr('viewBox', [0,0,width,height]);
-  sim.force('center', d3.forceCenter(width/2, height/2));
-  sim.alpha(0.3).restart();
-}
-window.addEventListener('resize', resizeGraph);
-
-// ---- view toggle: graph starts hidden (0×0), so its force simulation
-// needs a real resize once it's actually shown, not just on window resize ----
+// ---- view toggle: the lane graph starts hidden (0×0), so it needs one
+// real layout pass once it's actually shown, not just on window resize ----
 const viewToggle = document.getElementById('view-toggle');
 let graphEverShown = false;
 viewToggle.addEventListener('click', (ev) => {
@@ -309,10 +333,11 @@ viewToggle.addEventListener('click', (ev) => {
   const view = btn.dataset.view;
   viewToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
   timelineWrap.classList.toggle('hidden', view !== 'timeline');
-  document.getElementById('canvas-wrap').classList.toggle('hidden', view !== 'graph');
+  wrap.classList.toggle('hidden', view !== 'graph');
   if (view === 'graph' && !graphEverShown) {
     graphEverShown = true;
-    resizeGraph();
+    renderGraph();
+    if (selected) selectNode(selected);
   }
 });
 </script>
